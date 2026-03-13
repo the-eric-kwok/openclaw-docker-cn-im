@@ -7,6 +7,7 @@ OPENCLAW_WORKSPACE="${WORKSPACE:-/home/node/.openclaw/workspace}"
 NODE_UID="$(id -u node)"
 NODE_GID="$(id -g node)"
 GATEWAY_PID=""
+FRPC_PID=""
 
 log_section() {
     echo "=== $1 ==="
@@ -1482,6 +1483,11 @@ setup_runtime_env() {
 
 cleanup() {
     echo "=== 接收到停止信号,正在关闭服务 ==="
+    if [ -n "$FRPC_PID" ]; then
+        kill -TERM "$FRPC_PID" 2>/dev/null || true
+        wait "$FRPC_PID" 2>/dev/null || true
+        echo "frpc 已停止"
+    fi
     if [ -n "$GATEWAY_PID" ]; then
         kill -TERM "$GATEWAY_PID" 2>/dev/null || true
         wait "$GATEWAY_PID" 2>/dev/null || true
@@ -1492,6 +1498,19 @@ cleanup() {
 
 install_signal_traps() {
     trap cleanup SIGTERM SIGINT SIGQUIT
+}
+
+start_frpc() {
+    if [ ! -f /etc/frpc/frpc.toml ]; then
+        echo "=== frpc 配置文件不存在，跳过启动 ==="
+        return
+    fi
+    log_section "启动 frpc"
+    gosu node env HOME=/home/node \
+        PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH" \
+        frpc -c /etc/frpc/frpc.toml > /var/log/frpc.log 2>&1 &
+    FRPC_PID=$!
+    echo "frpc 已启动 (PID: $FRPC_PID)"
 }
 
 start_gateway() {
@@ -1531,6 +1550,7 @@ main() {
     print_runtime_summary
     setup_runtime_env
     install_signal_traps
+    start_frpc
     start_gateway
     wait_for_gateway
 }

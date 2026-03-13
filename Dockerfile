@@ -6,9 +6,13 @@ WORKDIR /app
 
 # 配置 UCloud 镜像源（DEB822 格式）
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-        sed -i 's|http://deb.debian.org/debian|http://mirrors.ucloud.cn/debian|g' /etc/apt/sources.list.d/debian.sources; \
-        sed -i 's|http://deb.debian.org/debian-security|http://mirrors.ucloud.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's/deb.debian.org/mirrors.ucloud.cn/g' /etc/apt/sources.list.d/debian.sources; \
     fi
+
+# 配置 USTC 镜像源（DEB822 格式）
+# RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+#         sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources; \
+#     fi
 
 # 设置环境变量
 ENV BUN_INSTALL="/usr/local" \
@@ -115,6 +119,14 @@ USER root
 COPY ./init.sh /usr/local/bin/init.sh
 RUN sed -i 's/\r$//' /usr/local/bin/init.sh && \
     chmod +x /usr/local/bin/init.sh
+
+# 创建 frpc 配置目录并复制配置文件
+RUN mkdir -p /etc/frpc
+COPY frpc.toml /etc/frpc/frpc.toml
+RUN chown node:node /etc/frpc/frpc.toml
+
+# 创建 frpc 日志目录
+RUN mkdir -p /var/log && touch /var/log/frpc.log && chown node:node /var/log/frpc.log
 
 # 设置环境变量
 ENV HOME=/home/node \

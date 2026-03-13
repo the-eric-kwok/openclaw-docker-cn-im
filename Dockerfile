@@ -4,12 +4,18 @@ FROM node:22-slim
 # 设置工作目录
 WORKDIR /app
 
+# 配置 UCloud 镜像源（DEB822 格式）
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|http://deb.debian.org/debian|http://mirrors.ucloud.cn/debian|g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's|http://deb.debian.org/debian-security|http://mirrors.ucloud.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources; \
+    fi
+
 # 设置环境变量
 ENV BUN_INSTALL="/usr/local" \
     PATH="/usr/local/bin:$PATH" \
     DEBIAN_FRONTEND=noninteractive
 
-# 1. 合并系统依赖安装与全局工具安装，并清理缓存
+# 合并系统依赖安装与全局工具安装，并清理缓存
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     bash \
@@ -17,6 +23,7 @@ RUN apt-get update && \
     chromium \
     curl \
     build-essential \
+    file \
     ffmpeg \
     fonts-liberation \
     fonts-noto-cjk \
@@ -27,7 +34,8 @@ RUN apt-get update && \
     locales \
     openssh-client \
     procps \
-    python3 \
+    python3 python3-pip \
+    sudo \
     socat \
     tini \
     unzip \
@@ -51,7 +59,11 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm /root/.cache
 
-# 2. 插件安装（作为 node 用户以避免后期权限修复带来的镜像膨胀）
+# 配置 pip 镜像源并安装 Python 包（lain-upload 和 yt-dlp）
+RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip3 install --no-cache-dir --break-system-packages lain-upload yt-dlp
+
+# 插件安装（作为 node 用户以避免后期权限修复带来的镜像膨胀）
 RUN mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/extensions && \
     chown -R node:node /home/node
 
@@ -60,6 +72,11 @@ ENV HOME=/home/node
 WORKDIR /home/node
 
 # 安装linuxbrew（Homebrew 的 Linux 版本），并配置环境变量
+ENV HOMEBREW_BREW_GIT_REMOTE="https://mirrors.ustc.edu.cn/brew.git"
+ENV HOMEBREW_CORE_GIT_REMOTE="https://mirrors.ustc.edu.cn/homebrew-core.git"
+ENV HOMEBREW_BOTTLE_DOMAIN="https://mirrors.ustc.edu.cn/homebrew-bottles"
+ENV HOMEBREW_API_DOMAIN="https://mirrors.ustc.edu.cn/homebrew-bottles/api"
+ENV HOMEBREW_INSTALL_FROM_API=1
 RUN mkdir -p /home/node/.linuxbrew/Homebrew && \
     git clone --depth 1 https://github.com/Homebrew/brew /home/node/.linuxbrew/Homebrew && \
     mkdir -p /home/node/.linuxbrew/bin && \
@@ -91,7 +108,7 @@ RUN cd /home/node/.openclaw/extensions && \
   rm -rf /home/node/.openclaw/qqbot/.git && \
   rm -rf /tmp/* /home/node/.npm /home/node/.cache
   
-# 3. 最终配置
+# 最终配置
 USER root
 
 # 复制初始化脚本并确保换行符为 LF
@@ -111,8 +128,12 @@ ENV HOME=/home/node \
     HOMEBREW_NO_AUTO_UPDATE=1 \
     HOMEBREW_NO_INSTALL_CLEANUP=1
 
+# 用 linuxbrew 安装 gh（GitHub CLI），并配置环境变量
+RUN export PATH="/home/node/.linuxbrew/bin:/home/node/.linuxbrew/sbin:${PATH}" \
+    && brew install gh frpc
+
 # 暴露端口
-EXPOSE 18789 18790
+#EXPOSE 18789 18790
 
 # 设置工作目录为 home
 WORKDIR /home/node
